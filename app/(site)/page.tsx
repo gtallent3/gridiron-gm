@@ -25,10 +25,13 @@ export default function Page() {
           <Link
             href="/startsit"
             className="
-              px-[6rem] py-[4rem] text-xl rounded-2xl border border-emerald-500/40 
+              px-[6rem] py-[4rem] text-2xl rounded-[28px] border border-emerald-500/40 
               bg-emerald-500/15 text-emerald-300 font-semibold
-              hover:bg-emerald-500/25 hover:text-emerald-200 
-              transition duration-200 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.35)]
+              bg-zinc-200 text-zinc-900
+              hover:bg-zinc-300 hover:border-emerald-300 hover:text-black
+              transition duration-300
+              shadow-[0_0_25px_rgba(16,185,129,0.25)]
+              hover:shadow-[0_0_35px_rgba(16,185,129,0.40)]
             "
           >
             Launch Start/Sit
@@ -36,11 +39,14 @@ export default function Page() {
           <Link
             href="/trade"
             className="
-              px-[6rem] py-[4rem] text-xl rounded-2xl border border-sky-500/40 
+              px-[6rem] py-[4rem] text-2xl rounded-[28px] border border-sky-500/40 
               bg-sky-500/15 text-sky-300 font-semibold
-              hover:bg-sky-500/25 hover:text-sky-200 
-              transition duration-200 shadow-[0_0_20px_rgba(56,189,248,0.2)] hover:shadow-[0_0_25px_rgba(56,189,248,0.35)]
-            "
+              bg-zinc-200 text-zinc-900
+              hover:bg-zinc-300 hover:border-sky-300 hover:text-black
+              transition duration-300
+              shadow-[0_0_25px_rgba(56,189,248,0.25)]
+              hover:shadow-[0_0_35px_rgba(56,189,248,0.40)]
+      "
           >
             Try Trade Analyzer
           </Link>
