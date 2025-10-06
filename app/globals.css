@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+html, body { background: #000; }
+* { -webkit-font-smoothing: antialiased; }
+
+/* --- Patch: cleaner links and focus rings --- */
+a { text-decoration: none; color: inherit; }
+a:visited { color: inherit; }
+a:hover { color: #e5e7eb; } /* zinc-200 */
+a:focus { outline: none; }
+a:focus-visible {
+  outline: 2px solid rgba(16,185,129,0.45);
+  outline-offset: 2px;
+  border-radius: 12px;
+}
