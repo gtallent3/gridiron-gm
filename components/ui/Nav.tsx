@@ -15,7 +15,7 @@ export default function Nav(){
           <Link className="text-zinc-400 hover:text-zinc-200 no-underline visited:text-zinc-200" href="/rankings">Rankings</Link>
           <Link className="text-zinc-400 hover:text-zinc-200 no-underline visited:text-zinc-200" href="/league">League Sync</Link>
         </div>
-        <Button href="/pro">Go Pro</Button>
+        <Button href="/pro" className="visited:text-emerald-300">Go Pro</Button>
       </div>
     </nav>
   )
