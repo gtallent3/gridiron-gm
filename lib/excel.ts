@@ -1,6 +1,13 @@
 // lib/excel.ts
 import * as XLSX from "xlsx";
 
+/** Component stats returned to the UI */
+export type StatBreakdown = {
+  passYds: number; passTD: number; ints: number;
+  rushYds: number; rushTD: number; fumbles: number;
+  rec: number; recYds: number; recTD: number;
+};
+
 /** Shape returned to the UI */
 export type PlayerOut = {
   id: string;
@@ -13,6 +20,7 @@ export type PlayerOut = {
   projected: number;            // total PPR for the week
   startable: boolean;           // projected >= threshold
   spark: number[];              // last few weeks incl. this one
+  stats: StatBreakdown;         // component stats for the week
 };
 
 /** ---- PPR scoring ---- */
@@ -30,6 +38,13 @@ const SCORING = {
 
 /* ----------------- small helpers ----------------- */
 const num = (v: any, d = 0) => (Number.isFinite(Number(v)) ? Number(v) : d);
+
+const firstNum = (obj: any, keys: string[], d = 0) => {
+  for (const k of keys) {
+    if (obj && obj[k] != null && obj[k] !== "") return num(obj[k], d);
+  }
+  return d;
+};
 
 const initialsOf = (name: string) =>
   name.split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
@@ -54,6 +69,8 @@ function riskFromPts(p: number): PlayerOut["risk"] {
 /**
  * Read a sheet in matrix mode, auto-detect the first real header row,
  * normalize the blank home/away column to '@', and return row objects.
+ * Also de-duplicates headers by appending .1, .2, ... so we don't overwrite
+ * (e.g., Sports-Ref "Yds" then "Yds.1" for sack yards).
  */
 function readRows(workbook: XLSX.WorkBook, sheetName?: string): any[] {
   if (!sheetName || !workbook.Sheets[sheetName]) return [];
@@ -76,7 +93,14 @@ function readRows(workbook: XLSX.WorkBook, sheetName?: string): any[] {
   }
 
   const rawHeaders = (mat[headerIdx] || []).map(h => String(h ?? "").trim());
-  const headers = rawHeaders.map(h => (h === "" ? "@" : h)); // blank column = home/away
+  // de-duplicate headers
+  const counts: Record<string, number> = {};
+  const headers = rawHeaders.map(h => {
+    const base = h === "" ? "@" : h;
+    const n = counts[base] ?? 0;
+    counts[base] = n + 1;
+    return n === 0 ? base : `${base}.${n}`;
+  });
 
   const out: any[] = [];
   for (let r = headerIdx + 1; r < mat.length; r++) {
@@ -103,25 +127,40 @@ function who(r: any) {
   return { name, team, opp: oppStr, pos };
 }
 
-/** Scoring using normalized headers */
-function ptsPassing(r: any) {
-  const yds  = num(r.Yds);
-  const td   = num(r.TD);
-  const ints = num(r.Int ?? r.INT ?? r.Interceptions);
-  return yds * SCORING.passYds + td * SCORING.passTD + ints * SCORING.passInt;
+/** Return (points, parts) for passing rows; includes QB rushing + fumbles if present */
+function ptsPassingWithParts(r: any) {
+  // Prefer the FIRST 'Yds' (true pass yards). 'Yds.1' is sack yards on Sports-Ref.
+  const passYds = firstNum(r, ["Yds", "PassYds", "Pass Yds"]);
+  const passTD  = firstNum(r, ["TD", "PassTD", "Pass TD"]);
+  const ints    = firstNum(r, ["Int", "INT", "Interceptions", "Int."]);
+
+  // some passing sheets include these for QBs
+  const rushYds = firstNum(r, ["RushYds", "RushingYds", "Rushing Yds", "Yds.2"]);
+  const rushTD  = firstNum(r, ["RushTD", "RushingTD", "Rushing TD"]);
+  const fumbles = firstNum(r, ["FmbLost", "FL", "Fumbles Lost", "Fumbles"]);
+
+  const pts = passYds*SCORING.passYds + passTD*SCORING.passTD + ints*SCORING.passInt
+            + rushYds*SCORING.rushYds + rushTD*SCORING.rushTD + fumbles*SCORING.fumLost;
+
+  return { pts, parts: { passYds, passTD, ints, rushYds, rushTD, fumbles, rec:0, recYds:0, recTD:0 } as StatBreakdown };
 }
-function ptsRushing(r: any) {
-  const yds = num(r.Yds);
-  const td  = num(r.TD);
-  const fml = num(r.FmbLost ?? r.FL ?? r["Fumbles Lost"]);
-  return yds * SCORING.rushYds + td * SCORING.rushTD + fml * SCORING.fumLost;
+
+function ptsRushingWithParts(r: any) {
+  const rushYds = firstNum(r, ["Yds", "RushYds", "RushingYds"]);
+  const rushTD  = firstNum(r, ["TD", "RushTD", "RushingTD"]);
+  const fumbles = firstNum(r, ["FmbLost", "FL", "Fumbles Lost"]);
+
+  const pts = rushYds*SCORING.rushYds + rushTD*SCORING.rushTD + fumbles*SCORING.fumLost;
+  return { pts, parts: { passYds:0, passTD:0, ints:0, rushYds, rushTD, fumbles, rec:0, recYds:0, recTD:0 } as StatBreakdown };
 }
-function ptsReceiving(r: any) {
-  const rec = num(r.Rec ?? r.Receptions);
-  const yds = num(r.Yds);
-  const td  = num(r.TD);
-  const fml = num(r.FmbLost ?? r.FL ?? r["Fumbles Lost"]);
-  return rec * SCORING.rec + yds * SCORING.recYds + td * SCORING.recTD + fml * SCORING.fumLost;
+
+function ptsReceivingWithParts(r: any) {
+  const rec    = firstNum(r, ["Rec", "Receptions"]);
+  const recYds = firstNum(r, ["Yds", "RecYds"]);
+  const recTD  = firstNum(r, ["TD", "RecTD"]);
+
+  const pts = rec*SCORING.rec + recYds*SCORING.recYds + recTD*SCORING.recTD;
+  return { pts, parts: { passYds:0, passTD:0, ints:0, rushYds:0, rushTD:0, fumbles:0, rec, recYds, recTD } as StatBreakdown };
 }
 
 /** Pick an existing sheet name from a set of candidates */
@@ -143,18 +182,32 @@ export function getPlayersForWeekFromWorkbook(week: number, wb: XLSX.WorkBook): 
   const receiving = readRows(wb, recvName);
 
   // Merge by player|team
-  const byKey = new Map<string, { name: string; team: string; opp?: string; pos?: string; total: number }>();
+  const zeroStats = (): StatBreakdown => ({ passYds:0, passTD:0, ints:0, rushYds:0, rushTD:0, fumbles:0, rec:0, recYds:0, recTD:0 });
+  const byKey = new Map<string, { name: string; team: string; opp?: string; pos?: string; total: number; stats: StatBreakdown }>();
 
   const add = (rows: any[], kind: "pass" | "rush" | "recv") => {
     for (const r of rows) {
       const { name, team, opp, pos } = who(r);
       if (!name || !team) continue;
       const key = `${name}|${team}`;
-      const cur = byKey.get(key) || { name, team, opp, pos, total: 0 };
+      const cur = byKey.get(key) || { name, team, opp, pos, total: 0, stats: zeroStats() };
 
-      if (kind === "pass") cur.total += ptsPassing(r);
-      if (kind === "rush") cur.total += ptsRushing(r);
-      if (kind === "recv") cur.total += ptsReceiving(r);
+      if (kind === "pass") {
+        const { pts, parts } = ptsPassingWithParts(r);
+        cur.total += pts;
+        for (const k in parts) (cur.stats as any)[k] += (parts as any)[k];
+        if (!cur.pos) cur.pos = pos && String(pos).trim() ? pos : "QB"; // QB fallback when Pos missing
+      }
+      if (kind === "rush") {
+        const { pts, parts } = ptsRushingWithParts(r);
+        cur.total += pts;
+        for (const k in parts) (cur.stats as any)[k] += (parts as any)[k];
+      }
+      if (kind === "recv") {
+        const { pts, parts } = ptsReceivingWithParts(r);
+        cur.total += pts;
+        for (const k in parts) (cur.stats as any)[k] += (parts as any)[k];
+      }
 
       if (!cur.opp && opp) cur.opp = opp;
       if (!cur.pos && pos) cur.pos = pos;
@@ -185,7 +238,9 @@ export function getPlayersForWeekFromWorkbook(week: number, wb: XLSX.WorkBook): 
       const p = match(wr.pass);
       const r = match(wr.rush);
       const c = match(wr.recv);
-      const pts = (p ? ptsPassing(p) : 0) + (r ? ptsRushing(r) : 0) + (c ? ptsReceiving(c) : 0);
+      const pts = (p ? ptsPassingWithParts(p).pts : 0)
+                + (r ? ptsRushingWithParts(r).pts : 0)
+                + (c ? ptsReceivingWithParts(c).pts : 0);
       return Number(pts.toFixed(1));
     });
 
@@ -201,6 +256,7 @@ export function getPlayersForWeekFromWorkbook(week: number, wb: XLSX.WorkBook): 
       projected,
       startable: projected >= 10, // tweak threshold to taste
       spark: spark.length ? spark : [projected],
+      stats: v.stats,
     });
   }
 
