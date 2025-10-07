@@ -1,3 +1,4 @@
+// components/StartSit.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -22,6 +23,11 @@ type Player = {
   projected: number;
   startable: boolean;
   spark: number[];
+  stats: {
+    passYds: number; passTD: number; ints: number;
+    rushYds: number; rushTD: number; fumbles: number;
+    rec: number; recYds: number; recTD: number;
+  };
 };
 
 /* -------- Small UI helpers -------- */
@@ -90,14 +96,15 @@ function trend(arr: number[]) {
 /* ---------------- Main ---------------- */
 
 const WEEKS = Array.from({ length: 18 }, (_, i) => i + 1);
-const POSITIONS: Array<Player["pos"] | "ALL"> = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"];
+const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
+type PosFilter = (typeof POSITIONS)[number];
 
 export default function StartSit() {
   const [week, setWeek] = useState(1); // single week only
   const [players, setPlayers] = useState<Player[]>([]);
   const [query, setQuery] = useState("");
   const [riskOnly, setRiskOnly] = useState(false);
-  const [posFilter, setPosFilter] = useState<Player["pos"] | "ALL">("ALL");
+  const [posFilter, setPosFilter] = useState<PosFilter>("ALL");
   const [selected, setSelected] = useState<Player | null>(null);
 
   // Fetch for the selected week
@@ -159,7 +166,7 @@ export default function StartSit() {
           <span className="text-sm text-zinc-300 mr-1">Position</span>
           <select
             value={posFilter}
-            onChange={(e) => setPosFilter(e.target.value as any)}
+            onChange={(e) => setPosFilter(e.target.value as PosFilter)}
             className="bg-transparent text-sm text-zinc-200 outline-none"
           >
             {POSITIONS.map((p) => (
@@ -178,7 +185,7 @@ export default function StartSit() {
       </div>
 
       {/* Player grid */}
-      <div className="grid grid-cols-3 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filtered.map((p) => (
           <Card
             key={p.id}
@@ -260,8 +267,29 @@ export default function StartSit() {
                   />
                 </div>
 
-                <div className="text-xs text-zinc-400 leading-relaxed">
-                  Rationale (demo): matchup adjustment +7%, targets ↑ last 3 weeks, injury tag clear.
+                {/* Stat breakdown */}
+                <div className="rounded-xl border border-white/10 bg-zinc-950/50 p-3">
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-400 mb-2">Week stats</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+                    {[
+                      ["Pass Yds", selected.stats.passYds],
+                      ["Pass TD",  selected.stats.passTD],
+                      ["INT",      selected.stats.ints],
+                      ["Rush Yds", selected.stats.rushYds],
+                      ["Rush TD",  selected.stats.rushTD],
+                      ["Fumbles",  selected.stats.fumbles],
+                      ["Receptions", selected.stats.rec],
+                      ["Rec Yds",    selected.stats.recYds],
+                      ["Rec TD",     selected.stats.recTD],
+                    ]
+                      .filter(([, v]) => Number(v) !== 0)
+                      .map(([label, v]) => (
+                        <div key={label} className="flex items-center justify-between bg-zinc-900/50 rounded-md px-2 py-1">
+                          <span className="text-zinc-400">{label}</span>
+                          <span className="font-medium">{Number(v).toFixed(0)}</span>
+                        </div>
+                      ))}
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
