@@ -1,4 +1,4 @@
-import Nav from '@/components/ui/Nav'
+import Nav from '@/components/ui/nav'
 import Rankings from '@/components/Rankings'
 export default function Page(){
   return (

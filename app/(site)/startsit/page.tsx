@@ -1,5 +1,7 @@
-import Nav from '@/components/ui/Nav'
+import Nav from '@/components/ui/nav'
 import StartSit from '@/components/StartSit'
+
+
 
 export default function Page() {
   return (

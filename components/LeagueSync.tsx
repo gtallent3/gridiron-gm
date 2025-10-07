@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
-import Section from './ui/Section'
-import Badge from './ui/Badge'
+import Section from './ui/section'
+import Badge from './ui/badge'
 export default function LeagueSync(){
   const [status, setStatus] = useState('Not Connected')
   const [platform, setPlatform] = useState('sleeper')

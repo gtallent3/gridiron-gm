@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import Section from './ui/Section'
-import Badge from './ui/Badge'
+import Section from './ui/section'
+import Badge from './ui/badge'
 export default function Rankings(){
   const [pos, setPos] = useState('WR')
   const [week, setWeek] = useState(6)

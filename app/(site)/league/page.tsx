@@ -1,4 +1,4 @@
-import Nav from '@/components/ui/Nav'
+import Nav from '@/components/ui/nav'
 import LeagueSync from '@/components/LeagueSync'
 export default function Page(){
   return (

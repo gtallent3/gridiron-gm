@@ -1,4 +1,4 @@
-import Nav from '@/components/ui/Nav'
+import Nav from '@/components/ui/nav'
 import TradeAnalyzer from '@/components/TradeAnalyzer'
 export default function Page(){
   return (

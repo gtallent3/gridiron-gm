@@ -1,32 +1,27 @@
-import Link from "next/link";
-import { ComponentProps } from "react";
+"use client";
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
-type Props = ComponentProps<'a'> & {
-  href: string;
-  variant?: 'primary' | 'ghost';
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: "default" | "outline" | "ghost" | "destructive";
+  size?: "sm" | "md";
 };
 
-const base =
-  "inline-flex items-center justify-center rounded-xl border px-5 py-2.5 text-sm font-medium " +
-  "transition duration-200 no-underline visited:text-current focus:outline-none " +
-  "focus-visible:ring-2 focus-visible:ring-emerald-400/45 " +
-  "focus-visible:ring-offset-2 focus-visible:ring-offset-black";
+export function Button({
+  className,
+  variant = "default",
+  size = "md",
+  ...props
+}: ButtonProps) {
+  const base = "inline-flex items-center justify-center rounded-2xl font-medium transition-colors";
+  const sizes = size === "sm" ? "h-8 px-3 text-sm" : "h-10 px-4";
+  const variants =
+    {
+      default: "bg-emerald-600 hover:bg-emerald-500 text-white",
+      outline: "border border-white/10 bg-zinc-900/40 text-zinc-200 hover:bg-zinc-800/40",
+      ghost: "text-zinc-300 hover:bg-white/5",
+      destructive: "bg-rose-600 hover:bg-rose-500 text-white",
+    }[variant] ?? "";
 
-export default function Button({
-  href,
-  children,
-  variant = 'primary',
-  className = '',
-  ...rest
-}: Props) {
-  const styles =
-    variant === 'primary'
-      ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:scale-[1.02]"
-      : "bg-zinc-900 text-zinc-200 border-zinc-800 hover:bg-zinc-800 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:scale-[1.02]";
-
-  return (
-    <Link href={href} className={`${base} ${styles} ${className}`} {...rest}>
-      {children}
-    </Link>
-  );
+  return <button className={cn(base, sizes, variants, className)} {...props} />;
 }
