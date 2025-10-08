@@ -1,4 +1,3 @@
-// components/StartSit.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -7,10 +6,15 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 
-/* ---------------- Types ---------------- */
+/* ---------- Types must match your API ---------- */
+type StatBreakdown = {
+  passYds: number; passTD: number; ints: number;
+  rushYds: number; rushTD: number; fumbles: number;
+  rec: number; recYds: number; recTD: number;
+};
 
 type Player = {
   id: string;
@@ -23,14 +27,10 @@ type Player = {
   projected: number;
   startable: boolean;
   spark: number[];
-  stats: {
-    passYds: number; passTD: number; ints: number;
-    rushYds: number; rushTD: number; fumbles: number;
-    rec: number; recYds: number; recTD: number;
-  };
+  stats: StatBreakdown;
 };
 
-/* -------- Small UI helpers -------- */
+/* ---------- UI helpers ---------- */
 
 function MiniSpark({ values }: { values: number[] }) {
   const max = Math.max(...values);
@@ -73,161 +73,189 @@ function StartSitChip({ startable }: { startable: boolean }) {
   );
 }
 
-function Metric({ label, value, positive }: { label: string; value: string; positive?: boolean }) {
+function MetricBox({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-zinc-950/50 p-3">
-      <div className="text-[10px] uppercase tracking-wide text-zinc-400 mb-1">{label}</div>
-      <div className={cn("text-lg font-semibold", positive ? "text-emerald-400" : "text-zinc-100")}>{value}</div>
+    <div className="rounded-lg border border-white/10 bg-zinc-950/50 px-2.5 py-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-zinc-400">{label}</div>
+      <div className="text-sm font-semibold">{value}</div>
     </div>
   );
 }
 
-function volatility(arr: number[]) {
-  if (arr.length < 2) return "0.0";
-  const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-  const v = Math.sqrt(arr.reduce((s, x) => s + Math.pow(x - mean, 2), 0) / (arr.length - 1));
-  return v.toFixed(1);
-}
-function trend(arr: number[]) {
-  if (arr.length < 2) return 0;
-  return arr[arr.length - 1] - arr[0];
+const fmt0 = (n: number) => (Math.round((n + Number.EPSILON) * 10) / 10).toString().replace(/\.0$/, "");
+
+/** Return the small set of stat boxes we want to show per position (on the card) */
+function cardStatBoxes(p: Player) {
+  const s = p.stats;
+  if (p.pos === "QB") {
+    return [
+      { k: "Pass Yds", v: fmt0(s.passYds) },
+      { k: "Pass TD", v: s.passTD },
+      { k: "INT", v: s.ints },
+      { k: "Rush Yds", v: fmt0(s.rushYds) },
+      { k: "Rush TD", v: s.rushTD },
+    ];
+  }
+  if (p.pos === "RB") {
+    return [
+      { k: "Rush Yds", v: fmt0(s.rushYds) },
+      { k: "Rush TD", v: s.rushTD },
+      { k: "Rec", v: s.rec },
+      { k: "Rec Yds", v: fmt0(s.recYds) },
+      { k: "Rec TD", v: s.recTD },
+      { k: "Fum", v: s.fumbles },
+    ];
+  }
+  // WR / TE default
+  return [
+    { k: "Rec", v: s.rec },
+    { k: "Rec Yds", v: fmt0(s.recYds) },
+    { k: "Rec TD", v: s.recTD },
+    { k: "Rush Yds", v: fmt0(s.rushYds) },
+    { k: "Rush TD", v: s.rushTD },
+  ];
 }
 
-/* ---------------- Main ---------------- */
-
-const WEEKS = Array.from({ length: 18 }, (_, i) => i + 1);
-const POSITIONS = ["ALL", "QB", "RB", "WR", "TE", "K", "DEF"] as const;
-type PosFilter = (typeof POSITIONS)[number];
+/* ---------- MAIN ---------- */
 
 export default function StartSit() {
-  const [week, setWeek] = useState(1); // single week only
+  const [week, setWeek] = useState(1);
+  const [pos, setPos] = useState<"ALL" | Player["pos"]>("ALL");
   const [players, setPlayers] = useState<Player[]>([]);
   const [query, setQuery] = useState("");
   const [riskOnly, setRiskOnly] = useState(false);
-  const [posFilter, setPosFilter] = useState<PosFilter>("ALL");
   const [selected, setSelected] = useState<Player | null>(null);
 
-  // Fetch for the selected week
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/players?week=${week}`, { cache: "no-store" })
+    fetch(`/api/players?week=${week}`)
       .then((r) => r.json())
-      .then((data) => !cancelled && setPlayers((data.players ?? []) as Player[]))
+      .then((data) => !cancelled && setPlayers(data.players ?? []))
       .catch(() => !cancelled && setPlayers([]));
     return () => {
       cancelled = true;
     };
   }, [week]);
 
-  // Filters
   const filtered = useMemo(() => {
     return players.filter((p) => {
       const matches = p.name.toLowerCase().includes(query.toLowerCase());
       const riskOk = riskOnly ? p.risk !== "low" : true;
-      const posOk = posFilter === "ALL" ? true : p.pos === posFilter;
+      const posOk = pos === "ALL" ? true : p.pos === pos;
       return matches && riskOk && posOk;
     });
-  }, [players, query, riskOnly, posFilter]);
+  }, [players, query, riskOnly, pos]);
 
   return (
     <section>
-      {/* Controls row */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        {/* Week selector */}
-        <div className="flex items-center gap-2 rounded-lg bg-zinc-900/50 border border-white/10 px-3 py-2">
-          <Calendar className="h-4 w-4 text-zinc-400" />
-          <span className="text-sm text-zinc-300 mr-1">Week</span>
+      {/* Controls Row */}
+        <div className="flex flex-wrap items-center gap-3 mb-6">
+        {/* Week Selector */}
+        <div className="flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-zinc-300" />
+          <label className="text-zinc-300 text-sm">Week</label>
           <select
             value={week}
             onChange={(e) => setWeek(Number(e.target.value))}
-            className="bg-transparent text-sm text-zinc-200 outline-none"
+            className="h-8 rounded-md bg-zinc-900/60 border border-white/10 px-2 text-sm"
           >
-            {WEEKS.map((w) => (
-              <option key={w} value={w} className="bg-zinc-900">
-                {w}
-              </option>
+            {Array.from({ length: 18 }, (_, i) => i + 1).map((w) => (
+              <option key={w} value={w}>{w}</option>
             ))}
           </select>
         </div>
 
-        {/* Search */}
-        <div className="relative">
+        {/* Position Selector */}
+        <div className="flex items-center gap-2">
+          <label className="text-zinc-300 text-sm">Pos</label>
+          <select
+            value={pos}
+            onChange={(e) => setPos(e.target.value as any)}
+            className="h-8 rounded-md bg-zinc-900/60 border border-white/10 px-2 text-sm"
+          >
+            <option value="ALL">All</option>
+            <option value="QB">QB</option>
+            <option value="RB">RB</option>
+            <option value="WR">WR</option>
+            <option value="TE">TE</option>
+            <option value="K">K</option>
+            <option value="DEF">DEF</option>
+          </select>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-zinc-400" />
           <Input
             placeholder="Search players"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="pl-8 bg-zinc-900/50 border-white/10 w-64"
+            className="pl-8 bg-zinc-900/50 border-white/10 w-full"
           />
         </div>
 
-        {/* Position selector (dropdown like Week) */}
-        <div className="flex items-center gap-2 rounded-lg bg-zinc-900/50 border border-white/10 px-3 py-2">
-          <span className="text-sm text-zinc-300 mr-1">Position</span>
-          <select
-            value={posFilter}
-            onChange={(e) => setPosFilter(e.target.value as PosFilter)}
-            className="bg-transparent text-sm text-zinc-200 outline-none"
-          >
-            {POSITIONS.map((p) => (
-              <option key={p} value={p} className="bg-zinc-900">
-                {p === "ALL" ? "All" : p}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Risk only toggle */}
+        {/* Risk Toggle */}
         <div className="flex items-center gap-2 ml-auto">
           <span className="text-sm text-zinc-400">Risk only</span>
           <Switch checked={riskOnly} onCheckedChange={setRiskOnly} />
         </div>
       </div>
 
-      {/* Player grid */}
-      <div className="grid grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filtered.map((p) => (
-          <Card
-            key={p.id}
-            onClick={() => setSelected(p)}
-            className={cn(
-              "bg-zinc-900/60 border-white/10 hover:border-emerald-700/40 transition cursor-pointer",
-              selected?.id === p.id && "ring-1 ring-emerald-600/60"
-            )}
-          >
-            <CardHeader className="pb-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-zinc-800 grid place-content-center text-sm font-semibold">
-                    {p.initials}
-                  </div>
-                  <div>
-                    <CardTitle className="text-sm font-semibold leading-tight">{p.name}</CardTitle>
-                    <div className="text-xs text-zinc-400">
-                      {p.team} · {p.pos} · {p.opp} ·{" "}
-                      <span className="inline-flex items-center gap-1">
-                        <ShieldAlert className="h-3 w-3" /> <span>{p.risk}</span>
-                      </span>
+      {/* Player grid: 3 columns */}
+      <div className="grid grid-cols-3 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {filtered.map((p) => {
+          const boxes = cardStatBoxes(p).slice(0, 6); // keep it compact on card
+          return (
+            <Card
+              key={p.id}
+              onClick={() => setSelected(p)}
+              className={cn(
+                "bg-zinc-900/60 border-white/10 hover:border-emerald-700/40 transition cursor-pointer",
+                selected?.id === p.id && "ring-1 ring-emerald-600/60"
+              )}
+            >
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full bg-zinc-800 grid place-content-center text-sm font-semibold">
+                      {p.initials}
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-semibold leading-tight">{p.name}</CardTitle>
+                      <div className="text-xs text-zinc-400">
+                        {p.team} · {p.pos} · {p.opp} ·{" "}
+                        <span className="inline-flex items-center gap-1">
+                          <ShieldAlert className="h-3 w-3" /> <span>{p.risk}</span>
+                        </span>
+                      </div>
                     </div>
                   </div>
+                  <StartSitChip startable={p.startable} />
                 </div>
-                <StartSitChip startable={p.startable} />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-xs text-zinc-400 mb-1 flex items-center gap-1">
-                <LineChart className="h-3 w-3" />
-                Projected PPR
-              </div>
-              <div className="flex items-end justify-between">
-                <div className="text-2xl font-semibold">{p.projected.toFixed(1)}</div>
-                <div className="w-28 text-emerald-400/80">
-                  <MiniSpark values={p.spark} />
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                <div className="text-xs text-zinc-400 mb-1 flex items-center gap-1">
+                  <LineChart className="h-3 w-3" />
+                  Projected PPR
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                <div className="flex items-end justify-between">
+                  <div className="text-2xl font-semibold">{p.projected.toFixed(1)}</div>
+                  <div className="w-28 text-emerald-400/80">
+                    <MiniSpark values={p.spark} />
+                  </div>
+                </div>
+
+                {/* NEW: compact stat boxes on the card */}
+                <div className="grid grid-cols-3 gap-2">
+                  {boxes.map((b) => (
+                    <MetricBox key={b.k} label={b.k} value={b.v} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Details panel */}
@@ -240,7 +268,7 @@ export default function StartSit() {
           </CardHeader>
           <CardContent>
             {selected ? (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-full bg-zinc-800 grid place-content-center text-sm font-semibold">
                     {selected.initials}
@@ -253,43 +281,20 @@ export default function StartSit() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <Metric label="ProjPT" value={selected.projected.toFixed(1)} />
-                  <Metric label="Volatility" value={volatility(selected.spark)} />
-                  <Metric
-                    label="Form"
-                    value={`${trend(selected.spark) > 0 ? "+" : ""}${trend(selected.spark).toFixed(1)}`}
-                  />
-                  <Metric
-                    label="Decision"
-                    value={selected.startable ? "START" : "SIT"}
-                    positive={selected.startable}
-                  />
-                </div>
-
-                {/* Stat breakdown */}
-                <div className="rounded-xl border border-white/10 bg-zinc-950/50 p-3">
-                  <div className="text-[10px] uppercase tracking-wide text-zinc-400 mb-2">Week stats</div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
-                    {[
-                      ["Pass Yds", selected.stats.passYds],
-                      ["Pass TD",  selected.stats.passTD],
-                      ["INT",      selected.stats.ints],
-                      ["Rush Yds", selected.stats.rushYds],
-                      ["Rush TD",  selected.stats.rushTD],
-                      ["Fumbles",  selected.stats.fumbles],
-                      ["Receptions", selected.stats.rec],
-                      ["Rec Yds",    selected.stats.recYds],
-                      ["Rec TD",     selected.stats.recTD],
-                    ]
-                      .filter(([, v]) => Number(v) !== 0)
-                      .map(([label, v]) => (
-                        <div key={label} className="flex items-center justify-between bg-zinc-900/50 rounded-md px-2 py-1">
-                          <span className="text-zinc-400">{label}</span>
-                          <span className="font-medium">{Number(v).toFixed(0)}</span>
-                        </div>
-                      ))}
-                  </div>
+                {/* Big stat grid in the drawer */}
+                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                  {/* Passing */}
+                  <MetricBox label="Pass Yds" value={fmt0(selected.stats.passYds)} />
+                  <MetricBox label="Pass TD" value={selected.stats.passTD} />
+                  <MetricBox label="INT" value={selected.stats.ints} />
+                  {/* Rushing */}
+                  <MetricBox label="Rush Yds" value={fmt0(selected.stats.rushYds)} />
+                  <MetricBox label="Rush TD" value={selected.stats.rushTD} />
+                  <MetricBox label="Fumbles" value={selected.stats.fumbles} />
+                  {/* Receiving */}
+                  <MetricBox label="Rec" value={selected.stats.rec} />
+                  <MetricBox label="Rec Yds" value={fmt0(selected.stats.recYds)} />
+                  <MetricBox label="Rec TD" value={selected.stats.recTD} />
                 </div>
 
                 <div className="flex gap-2">
@@ -302,7 +307,9 @@ export default function StartSit() {
                 </div>
               </div>
             ) : (
-              <div className="text-sm text-zinc-400">Pick a player to see detailed metrics and reasoning.</div>
+              <div className="text-sm text-zinc-400">
+                Pick a player to see detailed metrics and reasoning.
+              </div>
             )}
           </CardContent>
         </Card>
